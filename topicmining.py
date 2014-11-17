@@ -1,10 +1,14 @@
-
 from gensim import corpora, models
-from itertools import chain
+from itertools import chain, izip_longest
 from urllib import urlopen
 from operator import itemgetter
 import csv
 import simplejson as json
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib import ticker
+from collections import Counter
+
 #The code for extracting entities from referata was taken by fnielsen git repository
 # Define a url as a Python string (note we are only getting 100 documents)
 url = "http://wikilit.referata.com/" + \
@@ -59,14 +63,16 @@ abstracts=[]
 for abstract,i in enumerate(papers):
     abstracts.append(papers[abstract]['Abstract'])
     
-
-stoplist = set('for a of the and to in'.split())
-texts = [[word for word in abstract.lower().split() if word not in stoplist]
+import nltk.corpus
+stopwords = nltk.corpus.stopwords.words('english')
+#stoplist = set('for a of the and to in wikipedia'.split())
+texts = [[word for word in abstract.lower().split() if word not in stopwords and word.isalpha() and word != 'wikipedia']
          for abstract in abstracts]
 all_tokens = sum(texts, [])
 tokens_once = set(word for word in set(all_tokens) if all_tokens.count(word) == 1)
 texts = [[word for word in text if word not in tokens_once]
-     for text in texts]  
+     for text in texts] 
+        
 #print texts
 dictionary = corpora.Dictionary(texts)
 dictionary.save('C:/Users/Ioanna/abstracts.dict')  
@@ -82,18 +88,58 @@ corpus_tfidf = tfidf[corpus]
 #lsi = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=50)
 #corpus_lsi = lsi[corpus_tfidf]
 #lsi.print_topics(20)
-lda = models.LdaModel(corpus=corpus_tfidf, id2word=dictionary, num_topics=50)
-for i in range(0, 50):
-    temp = lda.show_topic(i, 10)
+lda = models.LdaModel(corpus=corpus_tfidf, id2word=dictionary, num_topics=6)
+topics = []
+
+z = {}
+ha = []
+for i in range(0, 6):
+    temp = lda.show_topic(i, 6)
     terms = []
     for term in temp:
         terms.append(term[1])
-    print "Top 10 terms for topic #" + str(i) + ": "+ ", ".join(terms)
-    
-print 
-print 'Which LDA topic maximally describes a document?\n'
-print 'Original document: ' + abstracts[0]
-print 'Preprocessed document: ' + str(texts[0])
-print 'Matrix Market format: ' + str(corpus[0])
-print 'Topic probability mixture: ' + str(lda[corpus[0]])
-print 'Maximally probable topic: topic #' + str(max(lda[corpus[0]],key=itemgetter(0))[0])
+    topics.append(" ".join(terms))
+    print "Top 6 terms for topic #" + str(i) + ": "+ ", ".join(terms)
+    print "-"*80
+    la = []
+    for k in range(100) :
+        if max(lda[corpus[k]],key=itemgetter(1))[0] == i :
+            #print 'Article:' + str(papers[k][''])
+            print 'Year:' + papers[k]['Year']
+            la.append(int(papers[k]['Year']))
+            z = Counter(la)
+    ha.append(la) 
+        
+            #la = dict(izip_longest(*[iter(topics)] * 2, fillvalue=papers[k]['Year']))
+    print  
+
+print ha
+years =[]
+for i in ha:
+    years.append(Counter(i))
+print years    
+
+for x in range(2002, 2015):
+    for i in range(len(years)):
+        if years[i][x] == 0 :
+            years[i][x] = 0
+        
+
+def fnx(i) :
+    return  years[i].values()  
+
+X = np.arange(2002, 2015)
+Y1 = fnx(0)
+Y2 = fnx(1)
+Y3 = fnx(2)
+Y4 = fnx(3)
+Y5 = fnx(4)
+Y6 = fnx(5)
+#
+fig, ax = plt.subplots()
+x_formatter = ticker.ScalarFormatter(useOffset=False)
+y_formatter = ticker.ScalarFormatter(useOffset=False)
+ax.yaxis.set_major_formatter(y_formatter)
+ax.xaxis.set_major_formatter(x_formatter)
+ax.stackplot(X, Y1, Y2, Y3, Y4, Y5, Y6)
+plt.show()
