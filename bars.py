@@ -9,30 +9,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import random
 
-#def set_plot(i,Y,TopicTitles):
-#    colors = [(random.randint(0,255),random.randint(0,255),random.randint(0,255)) for color in range(50)]
-## These are the "Tableau 20" colors as RGB.  
-#
-#  
-## Scale the RGB values to the [0, 1] range, which is the format matplotlib accepts.  
-#    for i in range(len(colors)):  
-#      r, g, b = colors[i]  
-#      colors[i] = (r / 255., g / 255., b / 255.)
-#    s = pd.Series(Y[i],index = np.arange(2002, 2015))
-#    ax = plt.subplot(25/5,5,i+1)
-#    x_formatter = ticker.ScalarFormatter(useOffset=False)
-#    y_formatter = ticker.ScalarFormatter(useOffset=False)
-#    ax.yaxis.set_major_formatter(y_formatter)
-#    ax.xaxis.set_major_formatter(x_formatter)
-#    ax.set_title(TopicTitles[i])
-#    ax.set_ylabel('Number of Papers')
-#    plt.subplots_adjust(wspace=0.4,hspace=1)
-#    pd.Series.plot(s, kind='bar', color=colors[i],)
-#    font = {
-#        'weight' : 'normal',
-#        'size'   : 9}
-#
-#    plt.rc('font', **font)
+
     
     
 def bar_charts(number_of_topics, Y, TopicTitles):
