@@ -1,145 +1,204 @@
+# -*- coding: utf-8 -*-
+"""
+Topic Mining of Wikipedia literature using LDA method.
+"""
 from gensim import corpora, models
-from itertools import chain, izip_longest
-from urllib import urlopen
+#from itertools import chain, izip_longest
+#from urllib import urlopen
 from operator import itemgetter
+#import mongo_db
 import csv
-import simplejson as json
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib import ticker
+#from matplotlib import ticker
 from collections import Counter
-
-#The code for extracting entities from referata was taken by fnielsen git repository
-# Define a url as a Python string (note we are only getting 100 documents)
-url = "http://wikilit.referata.com/" + \
-    "wiki/Special:Ask/" + \
-    "-5B-5BCategory:Publications-5D-5D/" + \
-    "-3FHas-20author%3DAuthor(s)/-3FYear/" + \
-    "-3FPublished-20in/-3FAbstract/-3FHas-20topic%3DTopic(s)/" + \
-    "-3FHas-20domain%3DDomain(s)/" +  \
-    "format%3D-20csv/limit%3D-20100/offset%3D0"
-
-
-# Get and read the web page
-doc = urlopen(url).read()  # Object from urlopen has read function
-
-# Show the first 1000 characters
-#print(doc[:1000])
-
-
-web = urlopen(url)
-# 'web' is now a file-like handle
-lines = csv.reader(web, delimiter=',', quotechar='"')
-# JSON format instead that Semantic MediaWiki also exports
-url_json = "http://wikilit.referata.com/" + \
-    "wiki/Special:Ask/" + \
-    "-5B-5BCategory:Publications-5D-5D/" + \
-    "-3FHas-20author/-3FYear/" + \
-    "-3FPublished-20in/-3FAbstract/-3FHas-20topic)/" + \
-    "-3FHas-20domain/" +  \
-    "format%3D-20json"
-# Read JSON into a Python structure
-response = json.load(urlopen(url_json))
-
-# response['printrequests'] is a list, map iterates over the list
-columns = map(lambda item: item['label'], response['printrequests'])
-# gives ['', 'Has author', 'Year', 'Published in', 'Abstract', 
-#        'Has topic)', 'Has domain']
-# Reread CSV
-lines = csv.reader(urlopen(url), delimiter=',', quotechar='"')
-# Iterate over 'lines' and insert the into a list of dictionaries
-header = []
-papers = []
-for row in lines:      # csv module lacks unicode support!
-    line = [unicode(cell, 'utf-8') for cell in row]
-    if not header:     # Read the first line as header
-        header = line
-        continue   
-    papers.append(dict(zip(header, line)))
-
-# 'papers' is now an list of dictionaries
-
-abstracts=[]
-for abstract,i in enumerate(papers):
-    abstracts.append(papers[abstract]['Abstract'])
-    
+#import pandas as pd
 import nltk.corpus
-stopwords = nltk.corpus.stopwords.words('english')
-#stoplist = set('for a of the and to in wikipedia'.split())
-texts = [[word for word in abstract.lower().split() if word not in stopwords and word.isalpha() and word != 'wikipedia']
-         for abstract in abstracts]
-all_tokens = sum(texts, [])
-tokens_once = set(word for word in set(all_tokens) if all_tokens.count(word) == 1)
-texts = [[word for word in text if word not in tokens_once]
-     for text in texts] 
-        
-#print texts
-dictionary = corpora.Dictionary(texts)
-dictionary.save('C:/Users/Ioanna/abstracts.dict')  
+import Data
+import stack_plot
+import bars
 
-corpus = [dictionary.doc2bow(text) for text in texts]
-corpora.MmCorpus.serialize('C:/Users/Ioanna/abstracts.mm', corpus) # store to disk, for later use
+# load complete papers information and abstracts seperately
+papers, abstracts = Data.load_data()    
+# load the transformed documents
+dictionary, corpus_tfidf, corpus = Data.prepare_data()  
+#number_of_topics = 50
+def lda_function(number_of_topics):
+    """Applies LDA model to the data. 
+       Returns the first six terms of the topics as a list of strings,
+       the years of publication for the papers of each topic, and the LDA model.
+       """
+    
+    lda = models.LdaModel(corpus=corpus_tfidf, id2word=dictionary, num_topics=number_of_topics)
+    topics = []
 
-dictionary = corpora.Dictionary.load('C:/Users/Ioanna/abstracts.dict')
-corpus = corpora.MmCorpus('C:/Users/Ioanna/abstracts.mm')
-tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+    #z = {}
+    publish_years = []
+    #count = 0
 
-corpus_tfidf = tfidf[corpus]
-#lsi = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=50)
-#corpus_lsi = lsi[corpus_tfidf]
-#lsi.print_topics(20)
-lda = models.LdaModel(corpus=corpus_tfidf, id2word=dictionary, num_topics=6)
-topics = []
-
-z = {}
-ha = []
-for i in range(0, 6):
-    temp = lda.show_topic(i, 6)
-    terms = []
-    for term in temp:
-        terms.append(term[1])
-    topics.append(" ".join(terms))
-    print "Top 6 terms for topic #" + str(i) + ": "+ ", ".join(terms)
-    print "-"*80
-    la = []
-    for k in range(100) :
-        if max(lda[corpus[k]],key=itemgetter(1))[0] == i :
+    for i in range(0, number_of_topics):
+        temp = lda.show_topic(i, 6)   
+        terms = []
+        for term in temp:
+            terms.append(term[1])
+        topics.append(" ".join(terms))
+        topic_terms = "TOPIC #" + str(i) + ": "+ ", ".join(terms)
+        print topic_terms
+        print "-"*80
+        print "The contribution of first three terms:"
+        print lda.print_topic(i,3)
+        year = []
+        for k in range(len(papers)) :
+            # maximally probable topic for paper k
+            if max(lda[corpus[k]],key=itemgetter(1))[0] == i :
             #print 'Article:' + str(papers[k][''])
-            print 'Year:' + papers[k]['Year']
-            la.append(int(papers[k]['Year']))
-            z = Counter(la)
-    ha.append(la) 
+            #print 'Manual Topic:' +str(papers[k]['Topic(s)'])
+            #print 'Year:' + papers[k]['Year']
+                #count += 1
+                year.append(int(papers[k]['Year']))
+                #z = Counter(la)
+        publish_years.append(year) 
         
             #la = dict(izip_longest(*[iter(topics)] * 2, fillvalue=papers[k]['Year']))
-    print  
+        print  
+    return topics,publish_years,lda   
+    
+number_of_topics = 50    
+topics,publish_years,lda = lda_function(number_of_topics)
 
-print ha
-years =[]
-for i in ha:
-    years.append(Counter(i))
-print years    
 
-for x in range(2002, 2015):
-    for i in range(len(years)):
-        if years[i][x] == 0 :
-            years[i][x] = 0
+def save_results():
+    """Saves the generated topics and the papers predicted to belong to each
+       topic in csv format for later interpretation"""
+
+    with open('topics.csv', 'wb') as csvfile:
+            write_results = csv.writer(csvfile, delimiter = ' ',
+                             quotechar=' ', quoting=csv.QUOTE_MINIMAL)
+            for index,topic in enumerate(topics):
+                write_results.writerow("TOPIC#"+str(index)+" " + topic)
+                write_results.writerow(" ")
+                for k in range(len(papers)) :
+                    if max(lda[corpus[k]],key=itemgetter(1))[0] == index :
+                        write_results.writerow('- '+str(papers[k]['']) )  
+                write_results.writerow(" ")        
+#print ha
+def inspect_results():
+    """Asks the user for a number of paper and prints the title of paper, 
+       the manual topic and the terms of the predicted topic"""
+    Topics = [str(index) + ' '  +' '.join(tokenize_topics[index]) for index, i in enumerate(tokenize_topics)]
+    elements = []
+    for i in range(len(papers))    :
+        elements.append({'Article': str(papers[i]['']), 'Manual Topic': str(papers[i]['Topic(s)']), 'Predicted Topic': 'topic #'+Topics[max(lda[corpus[i]],key=itemgetter(1))[0]]})
+    print "Compare manual topic with predicted topic"
+    element = raw_input('Inspect article (choose a number between 0 and 499, press q to quit): ')
+    boundary = [str(i) for i in range(len(papers))]
+    while element != 'q':
+        if element in boundary:    
+            print elements[int(element)]
+            element = raw_input('Choose another article or press q to quit: ')
+        
+        else:
+            print 'Try again!'
+            element = raw_input('You should choose a number between 0 and 499: ')
+                
+#years =[]
+#for i in publish_years:
+#    years.append(Counter(i))
+#for x in range(2002, 2015):
+#    for i in range(len(years)):
+#        if years[i][x] == 0 :
+#            years[i][x] = 0                                
+def fnx(j) :
+    """Takes number of topic and returns a list of the number of papers 
+       published from 2002 to 2014 for each topic"""
+    years =[]
+    for i in publish_years:
+        years.append(Counter(i))
+    for x in range(2002, 2015):
+        for i in range(len(years)):
+            if years[i][x] == 0 :
+                years[i][x] = 0    
+    return  years[j].values()  
+    
+
+Y = [fnx(y) for y in range(number_of_topics)]    
+X = np.arange(2002, 2015)   
+tokenize_topics = [nltk.word_tokenize(topic) for topic in topics]
+TopicTitles = [str(index) + ' '  +' '.join(tokenize_topics[index][:2]) for index, i in enumerate(tokenize_topics)]
+
+num_of_papers = [sum(y) for y in Y]
+i = 1
+popular_topics = []
+popular_papers = []
+m = max(num_of_papers)
+inl = num_of_papers.index(m)
+popular_topics.append(num_of_papers.index(m))
+popular_papers.append(m)
+
+def la(m, i, inl):
+    
+        k = max([ind,n] for n,ind in enumerate(num_of_papers) if n not in popular_topics)
+        popular_topics.append(k[1])
+        popular_papers.append(k[0])
+       # popular_papers.append(max(num_of_papers.index(n) for n in num_of_papers if n!=m))
+        i += 1 
+        m = k[0]
+        inl = k[1]
+        if i == 5:
+            return popular_topics, popular_papers
+        else:
+            la(m,i, inl)
         
 
-def fnx(i) :
-    return  years[i].values()  
-
-X = np.arange(2002, 2015)
-Y1 = fnx(0)
-Y2 = fnx(1)
-Y3 = fnx(2)
-Y4 = fnx(3)
-Y5 = fnx(4)
-Y6 = fnx(5)
+la(m,i,inl)
+    
+PopularTopicTitles = []  
+  
+for popular in popular_topics:
+    for topic in topics:
+        if popular == topics.index(topic):
+            PopularTopicTitles.append(str(popular)+topic)
+plt.figure(num=4,figsize=(18,16))
+labels = PopularTopicTitles + ['other topics'] 
+other = len(papers) - sum(popular_papers) 
+              
+plt.pie(popular_papers + [other], labels=labels,
+        autopct='%1.1f%%', shadow=True, startangle=90)
+## Set aspect ratio to be equal so that pie is drawn as a circle.
+plt.axis('equal')
 #
-fig, ax = plt.subplots()
-x_formatter = ticker.ScalarFormatter(useOffset=False)
-y_formatter = ticker.ScalarFormatter(useOffset=False)
-ax.yaxis.set_major_formatter(y_formatter)
-ax.xaxis.set_major_formatter(x_formatter)
-ax.stackplot(X, Y1, Y2, Y3, Y4, Y5, Y6)
-plt.show()
+plt.show()             
+#        
+#        
+save_results()
+#
+stack_plot.stack(number_of_topics, TopicTitles, X, Y)
+#
+bars.bar_charts(number_of_topics, Y, TopicTitles)
+#            
+inspect_results()            
+        
+    
+
+    #print 
+    #print 'Which LDA topic maximally describes a document?\n'
+    #print 'Article:'+ str(papers[i][''])
+#print 'Original document: ' + abstracts[0]
+#print 'Preprocessed document: ' + str(texts[0])
+#print 'Matrix Market format: ' + str(corpus[0])
+    #print 'Topic probability mixture: ' + str(lda[corpus[i]])
+    #print 'Maximally probable topic: topic #' + str(max(lda[corpus[i]],key=itemgetter(1))[0])
+#print 'TOPIC #0'    
+#for i in range(100):
+#    
+#    if max(lda[corpus[i]],key=itemgetter(1))[0] == 0 :
+#      
+#        print 'Article:' + str(papers[i][''])
+    
+#topic_main = [str(max(lda[corpus[i]],key=itemgetter(0))[0]) for i in range(0,100)]
+#topic0 = [index for index, i in enumerate(topic_main) if i == '0']
+#topic1 = [index for index, i in enumerate(topic_main) if i == '1']
+#topic2 = [index for index, i in enumerate(topic_main) if i == '2']
+#topic3 = [index for index, i in enumerate(topic_main) if i == '3']
+#topic4 = [index for index, i in enumerate(topic_main) if i == '4']
+#topic5 = [index for index, i in enumerate(topic_main) if i == '5']
